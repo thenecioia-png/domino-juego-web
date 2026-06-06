@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dominó Ludoteka Clone</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #3e1e09;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    color: #fff;
+  }
+  #gameCanvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at center, #6b3410 0%, #3e1e09 100%);
+  }
+  #uiLayer {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  #topBar {
+    pointer-events: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(4px);
+  }
+  #menuOverlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(20, 10, 5, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    z-index: 10;
+  }
+  .hidden { display: none !important; }
+  h1 { font-size: 2.6rem; margin-bottom: 10px; color: #ffd700; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  .subtitle { font-size: 1.1rem; color: #ddd; margin-bottom: 30px; }
+  .btn {
+    pointer-events: auto;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 28px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 8px;
+    background: linear-gradient(180deg, #ffcc00, #e6b800);
+    color: #2b1d0e;
+    box-shadow: 0 4px 0 #b38f00, 0 6px 12px rgba(0,0,0,0.4);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: 0 0 0 #b38f00, 0 2px 6px rgba(0,0,0,0.4); }
+  .btn.secondary {
+    background: linear-gradient(180deg, #8d6e63, #6d4c41);
+    color: #fff;
+    box-shadow: 0 4px 0 #4e342e, 0 6px 12px rgba(0,0,0,0.4);
+  }
+  .btn.secondary:active { box-shadow: 0 0 0 #4e342e, 0 2px 6px rgba(0,0,0,0.4); }
+  .modeGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    max-width: 720px;
+    width: 90%;
+    margin-top: 10px;
+  }
+  .modeCard {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+    cursor: pointer;
+    transition: background .2s, transform .15s;
+  }
+  .modeCard:hover { background: rgba(255,255,255,0.16); transform: translateY(-3px); }
+  .modeCard h3 { color: #ffd700; margin-bottom: 6px; font-size: 1.25rem; }
+  .modeCard p { color: #ccc; font-size: 0.92rem; line-height: 1.3; }
+  #scoreBoard {
+    pointer-events: auto;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .scorePill {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .turnIndicator {
+    width: 10px; height: 10px; border-radius: 50%; background: #4caf50; display: inline-block; margin-right: 6px;
+  }
+  #messageArea {
+    pointer-events: auto;
+    position: absolute;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.65);
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 1rem;
+    min-height: 36px;
+    text-align: center;
+    max-width: 80%;
+    z-index: 5;
+  }
+  #bottomControls {
+    pointer-events: auto;
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 0;
+  }
+  #helpText {
+    position: absolute;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #ffecb3;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+
+<div id="uiLayer">
+  <div id="topBar">
+    <div id="scoreBoard"></div>
+    <div>
+      <button class="btn secondary" id="btnMenu" style="padding:8px 16px;font-size:0.95rem;">Menú</button>
+    </div>
+  </div>
+  <div id="messageArea">Bienvenido a Dominó</div>
+  <div id="bottomControls">
+    <button class="btn secondary" id="btnPass">Pasar / Robar</button>
+    <button class="btn secondary" id="btnHint">Pista</button>
+  </div>
+</div>
+
+<div id="menuOverlay">
+  <h1>🎲 Dominó Ludoteka</h1>
+  <div class="subtitle">Elige tu modo de juego</div>
+  <div class="modeGrid">
+    <div class="modeCard" data-mode="domino2">
+      <h3>Dominó para 2</h3>
+      <p>Cara a cara con pozo. Roba si no puedes jugar. A 100 puntos.</p>
+    </div>
+    <div class="modeCard" data-mode="domino3">
+      <h3>Dominó para 3</h3>
+      <p>Sin pozo, 9 fichas cada uno, sin doble blanca. A 100 puntos.</p>
+    </div>
+    <div class="modeCard" data-mode="dominoparejas">
+      <h3>Dominó por Parejas</h3>
+      <p>4 jugadores, 2 parejas. Sin pozo. A 150 puntos.</p>
+    </div>
+  </div>
+  <div style="margin-top:24px;">
+    <label style="color:#ccc;font-size:0.95rem;">Dificultad bots:</label>
+    <select id="difficulty" style="margin-left:8px;padding:6px 10px;border-radius:6px;border:none;font-size:0.95rem;">
+      <option value="easy">Fácil</option>
+      <option value="medium" selected>Medio</option>
+    </select>
+  </div>
+</div>
+
+<script>
+/* ===================== UTILS ===================== */
+const $ = id => document.getElementById(id);
+const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = randInt(0, i); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+const sumTiles = tiles => tiles.reduce((s, t) => s + t.a + t.b, 0);
+
+/* ===================== TILE ===================== */
+class Tile {
+  constructor(a, b) { this.a = a; this.b = b; this.id = `${a}-${b}`; }
+  clone() { return new Tile(this.a, this.b); }
+  matches(n) { return this.a === n || this.b === n; }
+  other(n) { return this.a === n ? this.b : this.a; }
+  isDouble() { return this.a === this.b; }
+  value() { return this.a + this.b; }
+}
+
+/* ===================== BOARD ===================== */
+class Board {
+  constructor() { this.clear(); }
+  clear() { this.chain = []; this.left = null; this.right = null; }
+  canPlace(tile) {
+    if (this.chain.length === 0) return true;
+    return tile.matches(this.left) || tile.matches(this.right);
+  }
+  place(tile, side) {
+    if (this.chain.length === 0) {
+      this.chain.push({ tile, side: 'center', placedLeft: tile.a, placedRight: tile.b });
+      this.left = tile.a; this.right = tile.b;
+      return true;
+    }
+    if (side === 'left' && tile.matches(this.left)) {
+      const open = this.left;
+      this.left = tile.other(open);
+      this.chain.unshift({ tile, side: 'left', open });
+      return true;
+    }
+    if (side === 'right' && tile.matches(this.right)) {
+      const open = this.right;
+      this.right = tile.other(open);
+      this.chain.push({ tile, side: 'right', open });
+      return true;
+    }
+    // Auto-side if only one fits
+    if (tile.matches(this.left) && !tile.matches(this.right)) {
+      const open = this.left;
+      this.left = tile.other(open);
+      this.chain.unshift({ tile, side: 'left', open });
+      return true;
+    }
+    if (tile.matches(this.right) && !tile.matches(this.left)) {
+      const open = this.right;
+      this.right = tile.other(open);
+      this.chain.push({ tile, side: 'right', open });
+      return true;
+    }
+    return false;
+  }
+}
+
+/* ===================== PLAYER ===================== */
+class Player {
+  constructor(name, human, team) {
+    this.name = name;
+    this.human = human;
+    this.team = team;
+    this.hand = [];
+    this.score = 0;
+  }
+  reset() { this.hand = []; }
+  canPlay(board) {
+    if (board.chain.length === 0) return this.hand.length > 0;
+    return this.hand.some(t => board.canPlace(t));
+  }
+  validMoves(board) {
+    if (board.chain.length === 0) return this.hand.map(t => ({ tile: t, side: 'center' }));
+    const moves = [];
+    for (const t of this.hand) {
+      if (board.chain.length > 0) {
+        if (t.matches(board.left)) moves.push({ tile: t, side: 'left' });
+        if (t.matches(board.right) && !(t.matches(board.left) && board.left === board.right && t.isDouble())) {
+          // avoid duplicate if left==right and it's a double that matches both
+          if (!t.matches(board.left) || board.left !== board.right || !t.isDouble())
+            moves.push({ tile: t, side: 'right' });
+        }
+        // If left and right are same number and tile matches it, allow both sides explicitly
+        if (t.matches(board.left) && board.left === board.right && t.isDouble()) {
+          if (!moves.some(m => m.tile === t && m.side === 'left')) moves.push({ tile: t, side: 'left' });
+          if (!moves.some(m => m.tile === t && m.side === 'right')) moves.push({ tile: t, side: 'right' });
+        }
+      }
+    }
+    return moves;
+  }
+}
+
+/* ===================== GAME ENGINE ===================== */
+class Game {
+  constructor(mode) {
+    this.mode = mode; // 'domino2' | 'domino3' | 'dominoparejas'
+    this.board = new Board();
+    this.pile = [];
+    this.round = 1;
+    this.turnIndex = 0;
+    this.starterIndex = 0;
+    this.players = [];
+    this.history = [];
+    this.gameOver = false;
+    this.roundOver = false;
+    this.winner = null;
+    this.targetScore = (mode === 'dominoparejas') ? 150 : 100;
+    this.msg = '';
+    this.setupPlayers();
+  }
+
+  setupPlayers() {
+    if (this.mode === 'domino2') {
+      this.players = [
+        new Player('Yo', true, 0),
+        new Player('Bot 1', false, 1)
+      ];
+    } else if (this.mode === 'domino3') {
+      this.players = [
+        new Player('Yo', true, 0),
+        new Player('Bot 1', false, 1),
+        new Player('Bot 2', false, 2)
+      ];
+    } else {
+      this.players = [
+        new Player('Yo', true, 0),
+        new Player('Bot 1', false, 1),
+        new Player('Bot 2', false, 0),
+        new Player('Bot 3', false, 1)
+      ];
+    }
+  }
+
+  buildDeck() {
+    const tiles = [];
+    const max = 6;
+    for (let i = 0; i <= max; i++) {
+      for (let j = i; j <= max; j++) {
+        if (this.mode === 'domino3' && i === 0 && j === 0) continue; // sin doble blanca
+        tiles.push(new Tile(i, j));
+      }
+    }
+    return shuffle(tiles);
+  }
+
+  startRound() {
+    this.board.clear();
+    this.pile = [];
+    this.roundOver = false;
+    this.players.forEach(p => p.reset());
+    const deck = this.buildDeck();
+
+    if (this.mode === 'domino2') {
+      // 7 cada uno, resto al pozo
+      for (let p of this.players) for (let i = 0; i < 7; i++) p.hand.push(deck.pop());
+      this.pile = deck;
+    } else if (this.mode === 'domino3') {
+      for (let p of this.players) for (let i = 0; i < 9; i++) p.hand.push(deck.pop());
+    } else {
+      for (let p of this.players) for (let i = 0; i < 7; i++) p.hand.push(deck.pop());
+    }
+
+    // Determine starter
+    if (this.round === 1) {
+      if (this.mode === 'domino2') {
+        let maxDouble = -1, starter = 0;
+        this.players.forEach((p, idx) => {
+          p.hand.forEach(t => { if (t.isDouble() && t.a > maxDouble) { maxDouble = t.a; starter = idx; } });
+        });
+        if (maxDouble === -1) {
+          // nadie tiene doble -> mayor suma
+          let maxSum = -1;
+          this.players.forEach((p, idx) => {
+            p.hand.forEach(t => { if (t.value() > maxSum) { maxSum = t.value(); starter = idx; } });
+          });
+        }
+        this.starterIndex = starter;
+      } else if (this.mode === 'domino3') {
+        let has66 = this.players.findIndex(p => p.hand.some(t => t.a === 6 && t.b === 6));
+        this.starterIndex = has66 >= 0 ? has66 : 0;
+      } else {
+        // parejas: primera mano puede abrir cualquiera, elegimos aleatorio para variedad
+        this.starterIndex = randInt(0, this.players.length - 1);
+      }
+    } else {
+      this.starterIndex = (this.starterIndex + 1) % this.players.length;
+    }
+    this.turnIndex = this.starterIndex;
+    this.msg = `Ronda ${this.round}. Empieza ${this.players[this.turnIndex].name}.`;
+  }
+
+  currentPlayer() { return this.players[this.turnIndex]; }
+
+  nextTurn() {
+    this.turnIndex = (this.turnIndex + 1) % this.players.length;
+  }
+
+  canAnyonePlay() {
+    return this.players.some(p => p.canPlay(this.board));
+  }
+
+  isBlocked() {
+    if (this.pile.length > 0) return false;
+    return !this.canAnyonePlay();
+  }
+
+  playTile(playerIdx, tile, side) {
+    const p = this.players[playerIdx];
+    const idx = p.hand.indexOf(tile);
+    if (idx === -1) return false;
+    const ok = this.board.place(tile, side);
+    if (!ok) return false;
+    p.hand.splice(idx, 1);
+    this.history.push({ player: p.name, tile: tile.clone(), side });
+    if (p.hand.length === 0) {
+      this.endRound(playerIdx);
+      return true;
+    }
+    this.nextTurn();
+    // skip bots/humans that must pass with empty pile in no-draw modes
+    this.skipPasses();
+    return true;
+  }
+
+  skipPasses() {
+    // Only for modes without draw pile
+    if (this.mode === 'domino2') return;
+    let safety = 0;
+    while (safety < this.players.length) {
+      const p = this.currentPlayer();
+      if (this.pile.length === 0 && !p.canPlay(this.board)) {
+        this.msg = `${p.name} pasa.`;
+        this.nextTurn();
+        safety++;
+      } else break;
+    }
+    if (this.isBlocked()) {
+      this.endRound(null);
+    }
+  }
+
+  drawIfNeeded() {
+    if (this.mode !== 'domino2') return false;
+    const p = this.currentPlayer();
+    if (p.canPlay(this.board)) return false;
+    if (this.pile.length === 0) return false;
+    // draw until playable or empty
+    while (this.pile.length > 0 && !p.canPlay(this.board)) {
+      p.hand.push(this.pile.pop());
+    }
+    return true;
+  }
+
+  passTurn() {
+    const p = this.currentPlayer();
+    if (this.mode === 'domino2') {
+      // try draw first
+      if (this.pile.length > 0) {
+        this.drawIfNeeded();
+        if (p.canPlay(this.board)) {
+          this.msg = `${p.name} robó y puede jugar.`;
+          return 'drawn';
+        }
+      }
+      if (!p.canPlay(this.board)) {
+        this.msg = `${p.name} pasa.`;
+        this.nextTurn();
+        if (this.isBlocked()) this.endRound(null);
+        return 'passed';
+      }
+      return 'canplay';
+    } else {
+      if (!p.canPlay(this.board)) {
+        this.msg = `${p.name} pasa.`;
+        this.nextTurn();
+        if (this.isBlocked()) this.endRound(null);
+        return 'passed';
+      }
+      return 'canplay';
+    }
+  }
+
+  endRound(winnerIdx) {
+    this.roundOver = true;
+    let msg = '';
+    if (winnerIdx !== null) {
+      const wp = this.players[winnerIdx];
+      if (this.mode === 'domino2') {
+        const rival = this.players[(winnerIdx + 1) % 2];
+        const pts = sumTiles(rival.hand);
+        wp.score += pts;
+        msg = `${wp.name} hizo dominó. +${pts} puntos.`;
+      } else if (this.mode === 'domino3') {
+        let pts = 0;
+        this.players.forEach((p, i) => { if (i !== winnerIdx) pts += sumTiles(p.hand); });
+        wp.score += pts;
+        msg = `${wp.name} hizo dominó. +${pts} puntos.`;
+      } else {
+        const team = wp.team;
+        let pts = 0;
+        this.players.forEach(p => { pts += sumTiles(p.hand); });
+        this.players.forEach(p => { if (p.team === team) p.score += pts; });
+        msg = `${wp.name} hizo dominó. Pareja ${team + 1} +${pts} puntos.`;
+      }
+    } else {
+      // blocked
+      if (this.mode === 'domino2') {
+        const p0 = this.players[0], p1 = this.players[1];
+        const s0 = sumTiles(p0.hand), s1 = sumTiles(p1.hand);
+        // in draw mode, remaining pile counts to opponent if blocked? Ludoteka rules: opponent keeps pile points
+        const pilePts = sumTiles(this.pile);
+        const t0 = s0, t1 = s1 + pilePts; // assume pile assigned to non-starter? Actually rules say: "el oponente se queda con las fichas que hubiera en el montón"
+        // We'll add pile to both? No. Simpler: add pile points to total and compute like normal blocked.
+        const total0 = s0, total1 = s1 + pilePts;
+        if (total0 < total1) {
+          const pts = total1 - total0;
+          p0.score += pts;
+          msg = `Tranca. ${p0.name} gana por ${pts} puntos.`;
+        } else if (total1 < total0) {
+          const pts = total0 - total1;
+          p1.score += pts;
+          msg = `Tranca. ${p1.name} gana por ${pts} puntos.`;
+        } else {
+          msg = `Tranca. Empate.`;
+        }
+      } else if (this.mode === 'domino3') {
+        const sums = this.players.map(p => ({ p, s: sumTiles(p.hand) }));
+        sums.sort((a, b) => a.s - b.s);
+        const winner = sums[0].p;
+        let pts = 0;
+        sums.slice(1).forEach(x => { pts += (x.s - sums[0].s); });
+        winner.score += pts;
+        msg = `Tranca. ${winner.name} gana por ${pts} puntos.`;
+      } else {
+        const teamSum = [0, 0];
+        this.players.forEach(p => { teamSum[p.team] += sumTiles(p.hand); });
+        let winTeam = teamSum[0] < teamSum[1] ? 0 : 1;
+        if (teamSum[0] === teamSum[1]) winTeam = this.players[this.starterIndex].team;
+        const pts = teamSum[0] + teamSum[1];
+        this.players.forEach(p => { if (p.team === winTeam) p.score += pts; });
+        msg = `Tranca. Gana pareja ${winTeam + 1}. +${pts} puntos.`;
+      }
+    }
+    // check game over
+    let max = Math.max(...this.players.map(p => p.score));
+    if (max >= this.targetScore) {
+      this.gameOver = true;
+      let gw = null;
+      if (this.mode === 'dominoparejas') {
+        const t0 = this.players.filter(p => p.team === 0).reduce((s, p) => s + p.score, 0);
+        const t1 = this.players.filter(p => p.team === 1).reduce((s, p) => s + p.score, 0);
+        gw = t0 >= t1 ? 'Pareja 1' : 'Pareja 2';
+      } else {
+        gw = this.players.reduce((best, p) => p.score > best.score ? p : best, this.players[0]).name;
+      }
+      this.msg = `🏆 ¡${gw} ganó la partida! ${msg}`;
+    } else {
+      this.msg = msg;
+    }
+  }
+
+  startNextRound() {
+    if (this.gameOver) return;
+    this.round++;
+    this.startRound();
+  }
+}
+
+/* ===================== RENDERER ===================== */
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.tileW = 44;
+    this.tileH = 86;
+    this.chainGap = 2;
+    this.handY = 0;
+    this.hoverTile = null;
+    this.animations = [];
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  }
+  resize() {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+    this.handY = this.canvas.height - 150;
+  }
+
+  clear() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  drawDot(ctx, cx, cy, r) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawHalf(ctx, x, y, w, h, n) {
+    const cx = x + w / 2, cy = y + h / 2, r = Math.max(2, w * 0.08);
+    const dx = w * 0.28, dy = h * 0.28;
+    ctx.fillStyle = '#111';
+    const positions = {
+      0: [],
+      1: [[0, 0]],
+      2: [[-1, -1], [1, 1]],
+      3: [[-1, -1], [0, 0], [1, 1]],
+      4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+      5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+      6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+    };
+    (positions[n] || []).forEach(([px, py]) => {
+      this.drawDot(ctx, cx + px * dx, cy + py * dy, r);
+    });
+  }
+
+  drawTile(ctx, x, y, w, h, tile, vertical, highlight, lastPlayed) {
+    ctx.save();
+    // shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 3;
+    // body
+    ctx.fillStyle = '#faf8f5';
+    const r = Math.min(w, h) * 0.08;
+    this.roundRect(ctx, x, y, w, h, r);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = highlight ? '#ff9800' : 'rgba(0,0,0,0.25)';
+    this.roundRect(ctx, x, y, w, h, r);
+    ctx.stroke();
+    // inner shadow inset feel
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    this.roundRect(ctx, x + 2, y + 2, w - 4, h - 4, r * 0.7);
+    ctx.fill();
+
+    if (vertical) {
+      const hw = w / 2;
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath(); ctx.moveTo(x + 4, y + h / 2); ctx.lineTo(x + w - 4, y + h / 2); ctx.stroke();
+      this.drawHalf(ctx, x, y, w, h / 2, tile.b);
+      this.drawHalf(ctx, x, y + h / 2, w, h / 2, tile.a);
+      if (lastPlayed) {
+        ctx.fillStyle = '#ffb300';
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    } else {
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath(); ctx.moveTo(x + w / 2, y + 4); ctx.lineTo(x + w / 2, y + h - 4); ctx.stroke();
+      this.drawHalf(ctx, x, y, w / 2, h, tile.a);
+      this.drawHalf(ctx, x + w / 2, y, w / 2, h, tile.b);
+      if (lastPlayed) {
+        ctx.fillStyle = '#ffb300';
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
+  }
+
+  drawBack(ctx, x, y, w, h) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#111';
+    const r = Math.min(w, h) * 0.08;
+    this.roundRect(ctx, x, y, w, h, r);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    // silver border
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 1.5;
+    this.roundRect(ctx, x, y, w, h, r);
+    ctx.stroke();
+    // inner highlight
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    this.roundRect(ctx, x + 2, y + 2, w - 4, h - 4, r * 0.7);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  renderBoard(board) {
+    const ctx = this.ctx;
+    const chain = board.chain;
+    if (chain.length === 0) return { leftRect: null, rightRect: null };
+
+    // compute layout
+    const isDouble = t => t.a === t.b;
+    const baseW = this.tileW;
+    const baseH = this.tileH;
+    const gap = this.chainGap;
+    // We'll do a simple snake layout: horizontal rows, turning when hitting margins
+    const marginX = 40;
+    const marginY = 100;
+    const availW = this.canvas.width - marginX * 2;
+    const availH = this.handY - marginY * 2;
+    const colW = baseW + gap;
+    const rowH = baseH + gap;
+    const cols = Math.max(1, Math.floor(availW / colW));
+    const rows = Math.max(1, Math.floor(availH / rowH));
+
+    // Assign grid positions
+    const positions = [];
+    let r = Math.floor(rows / 2), c = Math.floor(cols / 2);
+    let dir = 1; // 1 right, -1 left
+    positions.push({ r, c, orient: 'h' });
+    for (let i = 1; i < chain.length; i++) {
+      const prev = positions[i - 1];
+      const t = chain[i].tile;
+      // try to extend in current row direction
+      let nc = prev.c + dir;
+      if (nc < 0 || nc >= cols) {
+        // turn down and reverse
+        r = prev.r + 1;
+        dir *= -1;
+        nc = prev.c + dir;
+        if (r >= rows) { r = prev.r - 1; } // go up if no space
+      } else {
+        r = prev.r;
+      }
+      positions.push({ r, c: nc, orient: 'h' });
+    }
+
+    const startX = marginX + (availW - cols * colW) / 2;
+    const startY = marginY + (availH - rows * rowH) / 2;
+
+    const rects = [];
+    chain.forEach((item, i) => {
+      const pos = positions[i];
+      const tx = startX + pos.c * colW;
+      const ty = startY + pos.r * rowH;
+      const vertical = isDouble(item.tile);
+      const tw = vertical ? baseW : baseH;
+      const th = vertical ? baseH : baseW;
+      // center in cell
+      const cx = tx + colW / 2 - tw / 2;
+      const cy = ty + rowH / 2 - th / 2;
+      const lastPlayed = (i === chain.length - 1);
+      this.drawTile(ctx, cx, cy, tw, th, item.tile, vertical, false, lastPlayed);
+      rects.push({ x: cx, y: cy, w: tw, h: th, tile: item.tile });
+    });
+
+    // return drop zones for left/right ends (approximate)
+    const first = rects[0];
+    const last = rects[rects.length - 1];
+    return {
+      leftRect: { x: first.x - baseH, y: first.y, w: baseH, h: baseW },
+      rightRect: { x: last.x + last.w, y: last.y, w: baseH, h: baseW }
+    };
+  }
+
+  renderHand(player, board, x, y, maxWidth) {
+    const ctx = this.ctx;
+    const count = player.hand.length;
+    const desired = this.tileW + 4;
+    const spacing = count > 1 ? Math.min(desired, (maxWidth - this.tileW) / (count - 1)) : 0;
+    const totalW = this.tileW + spacing * (count - 1);
+    let cx = x - totalW / 2;
+    const rects = [];
+    for (let i = 0; i < count; i++) {
+      const t = player.hand[i];
+      const highlight = this.hoverTile === t;
+      const valid = board.canPlace(t);
+      ctx.globalAlpha = valid ? 1 : 0.5;
+      this.drawTile(ctx, cx, y, this.tileW, this.tileH, t, true, highlight && valid);
+      ctx.globalAlpha = 1;
+      rects.push({ x: cx, y, w: this.tileW, h: this.tileH, tile: t, valid });
+      cx += spacing;
+    }
+    return rects;
+  }
+
+  renderOpponent(count, name, x, y, align) {
+    const ctx = this.ctx;
+    const tw = this.tileW, th = this.tileH;
+    // draw small backs horizontally
+    const scale = 0.6;
+    const sw = tw * scale, sh = th * scale;
+    const spacing = sw + 2;
+    let cx = x - (count * spacing) / 2;
+    if (align === 'right') cx = x - count * spacing;
+    if (align === 'left') cx = x;
+    for (let i = 0; i < count; i++) {
+      this.drawBack(ctx, cx, y, sw, sh);
+      cx += spacing;
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(name, x + (align === 'left' ? count * spacing / 2 : 0), y - 8);
+  }
+
+  render(game) {
+    this.clear();
+    const ctx = this.ctx;
+    const W = this.canvas.width, H = this.canvas.height;
+
+    // board
+    const zones = this.renderBoard(game.board);
+    this.zones = zones;
+
+    // human hand
+    const p0 = game.players[0];
+    if (p0.hand.length > 0) {
+      this.handRects = this.renderHand(p0, game.board, W / 2, this.handY, W - 40);
+    } else {
+      this.handRects = [];
+    }
+
+    // opponents
+    if (game.mode === 'domino2') {
+      const p1 = game.players[1];
+      this.renderOpponent(p1.hand.length, p1.name, W / 2, 70, 'center');
+    } else if (game.mode === 'domino3') {
+      const p1 = game.players[1];
+      const p2 = game.players[2];
+      this.renderOpponent(p1.hand.length, p1.name, W - 80, H / 2 - 40, 'right');
+      this.renderOpponent(p2.hand.length, p2.name, 80, H / 2 - 40, 'left');
+    } else {
+      const p1 = game.players[1];
+      const p2 = game.players[2];
+      const p3 = game.players[3];
+      this.renderOpponent(p1.hand.length, p1.name, W / 2, 70, 'center');
+      this.renderOpponent(p2.hand.length, p2.name, W - 80, H / 2 - 40, 'right');
+      this.renderOpponent(p3.hand.length, p3.name, 80, H / 2 - 40, 'left');
+    }
+
+    // highlight valid drop zones if a tile selected or hover
+    if (this.hoverTile && game.board.canPlace(this.hoverTile)) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 200, 50, 0.7)';
+      ctx.lineWidth = 3;
+      if (zones.leftRect) ctx.strokeRect(zones.leftRect.x, zones.leftRect.y, zones.leftRect.w, zones.leftRect.h);
+      if (zones.rightRect) ctx.strokeRect(zones.rightRect.x, zones.rightRect.y, zones.rightRect.w, zones.rightRect.h);
+      ctx.restore();
+    }
+  }
+}
+
+/* ===================== AI ===================== */
+class AI {
+  static pickMove(game, difficulty) {
+    const p = game.currentPlayer();
+    const moves = p.validMoves(game.board);
+    if (moves.length === 0) return null;
+    if (difficulty === 'easy') return moves[randInt(0, moves.length - 1)];
+    // medium: prefer doubles, then high value, avoid blocking self
+    const scored = moves.map(m => {
+      let score = m.tile.value();
+      if (m.tile.isDouble()) score += 15;
+      // penalty if this move leaves us with no options next turn (simple heuristic)
+      const remaining = p.hand.filter(t => t !== m.tile);
+      const nextCanPlay = remaining.some(t => t.matches(m.tile.other(m.tile.a === game.board.left || (game.board.chain.length === 0) ? m.tile.a : m.tile.b)));
+      if (!nextCanPlay && remaining.length > 0) score -= 8;
+      return { move: m, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0].move;
+  }
+}
+
+/* ===================== APP ===================== */
+class App {
+  constructor() {
+    this.canvas = $('gameCanvas');
+    this.renderer = new Renderer(this.canvas);
+    this.game = null;
+    this.difficulty = 'medium';
+    this.selectedTile = null;
+    this.busy = false;
+    this.bindUI();
+    this.loop = this.loop.bind(this);
+    requestAnimationFrame(this.loop);
+  }
+
+  bindUI() {
+    document.querySelectorAll('.modeCard').forEach(el => {
+      el.addEventListener('click', () => this.startGame(el.dataset.mode));
+    });
+    $('btnMenu').addEventListener('click', () => this.showMenu());
+    $('btnPass').addEventListener('click', () => this.onPass());
+    $('btnHint').addEventListener('click', () => this.onHint());
+    $('difficulty').addEventListener('change', e => this.difficulty = e.target.value);
+
+    this.canvas.addEventListener('mousemove', e => this.onMouseMove(e));
+    this.canvas.addEventListener('click', e => this.onClick(e));
+  }
+
+  showMenu() {
+    $('menuOverlay').classList.remove('hidden');
+    this.game = null;
+  }
+
+  startGame(mode) {
+    $('menuOverlay').classList.add('hidden');
+    this.game = new Game(mode);
+    this.game.startRound();
+    this.updateUI();
+    this.processBotTurn();
+  }
+
+  updateUI() {
+    const g = this.game;
+    if (!g) return;
+    const sb = $('scoreBoard');
+    if (g.mode === 'dominoparejas') {
+      const t0 = g.players.filter(p => p.team === 0).reduce((s, p) => s + p.score, 0);
+      const t1 = g.players.filter(p => p.team === 1).reduce((s, p) => s + p.score, 0);
+      sb.innerHTML = `<div class="scorePill">Pareja 1: <b>${t0}</b></div><div class="scorePill">Pareja 2: <b>${t1}</b></div><div class="scorePill">Ronda ${g.round}</div>`;
+    } else {
+      sb.innerHTML = g.players.map((p, i) => `<div class="scorePill">${i === g.turnIndex ? '<span class="turnIndicator"></span>' : ''}${p.name}: <b>${p.score}</b></div>`).join('') + `<div class="scorePill">Ronda ${g.round}</div>`;
+    }
+    $('messageArea').textContent = g.msg;
+    $('btnPass').textContent = (g.mode === 'domino2' && g.currentPlayer().human && !g.currentPlayer().canPlay(g.board) && g.pile.length > 0) ? 'Robar' : 'Pasar';
+  }
+
+  processBotTurn() {
+    if (!this.game || this.game.roundOver || this.game.gameOver) return;
+    const p = this.game.currentPlayer();
+    if (p.human) return;
+    this.busy = true;
+    setTimeout(() => {
+      if (!this.game || this.game.roundOver) { this.busy = false; return; }
+      const move = AI.pickMove(this.game, this.difficulty);
+      if (move) {
+        this.game.playTile(this.game.turnIndex, move.tile, move.side);
+        this.playSound('place');
+      } else {
+        const res = this.game.passTurn();
+        if (res === 'drawn') this.playSound('draw');
+        else this.playSound('pass');
+      }
+      this.updateUI();
+      this.busy = false;
+      if (this.game.roundOver) this.handleRoundEnd();
+      else this.processBotTurn();
+    }, 900);
+  }
+
+  handleRoundEnd() {
+    setTimeout(() => {
+      if (!this.game.gameOver) {
+        this.game.startNextRound();
+        this.updateUI();
+        this.processBotTurn();
+      } else {
+        this.updateUI();
+        // show game over overlay or alert
+        const again = confirm('¿Jugar otra partida?');
+        if (again) this.showMenu();
+      }
+    }, 2500);
+  }
+
+  onMouseMove(e) {
+    if (!this.game || this.busy) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let hover = null;
+    for (const r of this.renderer.handRects || []) {
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        hover = r.tile;
+        break;
+      }
+    }
+    this.renderer.hoverTile = hover;
+  }
+
+  onClick(e) {
+    if (!this.game || this.busy || this.game.roundOver) return;
+    const p = this.game.currentPlayer();
+    if (!p.human) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+    // check hand click -> play immediately
+    for (const r of this.renderer.handRects || []) {
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        if (!r.valid) { this.playSound('error'); return; }
+        const moves = this.game.currentPlayer().validMoves(this.game.board).filter(m => m.tile === r.tile);
+        if (moves.length === 0) { this.playSound('error'); return; }
+        // if both sides are possible, default to the first available (usually left), but allow explicit choice via side buttons if we add them later
+        const side = moves[0].side;
+        const ok = this.game.playTile(this.game.turnIndex, r.tile, side);
+        if (ok) {
+          this.playSound('place');
+          this.renderer.hoverTile = null;
+          this.updateUI();
+          if (this.game.roundOver) this.handleRoundEnd();
+          else this.processBotTurn();
+        } else {
+          this.playSound('error');
+        }
+        return;
+      }
+    }
+
+    // fallback: click on board drop zones if a tile was previously selected (legacy support)
+    if (this.selectedTile) {
+      const z = this.renderer.zones;
+      let side = null;
+      if (this.game.board.chain.length === 0) {
+        side = 'center';
+      } else if (z && z.leftRect && mx >= z.leftRect.x && mx <= z.leftRect.x + z.leftRect.w && my >= z.leftRect.y && my <= z.leftRect.y + z.leftRect.h) {
+        side = 'left';
+      } else if (z && z.rightRect && mx >= z.rightRect.x && mx <= z.rightRect.x + z.rightRect.w && my >= z.rightRect.y && my <= z.rightRect.y + z.rightRect.h) {
+        side = 'right';
+      }
+      if (side) {
+        const ok = this.game.playTile(this.game.turnIndex, this.selectedTile, side);
+        if (ok) {
+          this.playSound('place');
+          this.selectedTile = null;
+          this.renderer.hoverTile = null;
+          this.updateUI();
+          if (this.game.roundOver) this.handleRoundEnd();
+          else this.processBotTurn();
+        } else {
+          this.playSound('error');
+        }
+      } else {
+        this.selectedTile = null;
+      }
+    }
+  }
+
+  onPass() {
+    if (!this.game || this.busy || this.game.roundOver) return;
+    const p = this.game.currentPlayer();
+    if (!p.human) return;
+    const res = this.game.passTurn();
+    if (res === 'canplay') {
+      this.game.msg = 'Tienes una jugada disponible.';
+    } else if (res === 'drawn') {
+      this.playSound('draw');
+    } else {
+      this.playSound('pass');
+    }
+    this.updateUI();
+    if (this.game.roundOver) this.handleRoundEnd();
+    else this.processBotTurn();
+  }
+
+  onHint() {
+    if (!this.game || this.busy) return;
+    const p = this.game.currentPlayer();
+    if (!p.human) return;
+    const moves = p.validMoves(this.game.board);
+    if (moves.length > 0) {
+      const m = moves[0];
+      this.game.msg = `Sugerencia: juega [${m.tile.a}|${m.tile.b}] por ${m.side === 'left' ? 'izquierda' : 'derecha'}.`;
+      this.updateUI();
+    } else {
+      this.game.msg = 'No tienes jugadas. Debes pasar/robar.';
+      this.updateUI();
+    }
+  }
+
+  playSound(type) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      if (type === 'place') {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(500, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.12);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15);
+      } else if (type === 'pass') {
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(250, now);
+        gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
+      } else if (type === 'draw') {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(600, now + 0.08);
+        gain.gain.setValueAtTime(0.12, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12);
+      } else if (type === 'error') {
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now);
+        gain.gain.setValueAtTime(0.08, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
+      }
+    } catch (e) {}
+  }
+
+  loop() {
+    if (this.game) this.renderer.render(this.game);
+    requestAnimationFrame(this.loop);
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => { window.app = new App(); });
+</script>
+</body>
+</html>

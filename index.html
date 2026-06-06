@@ -745,7 +745,7 @@ class Renderer {
     let useSnake = false;
     if (totalW > maxW) {
       scale = maxW / totalW;
-      if (scale < 0.9) {
+      if (scale < 1.0) {
         useSnake = true;
         scale = 1;
       }

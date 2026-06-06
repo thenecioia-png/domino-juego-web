@@ -746,7 +746,6 @@ class Renderer {
     if (totalW > maxW) {
       scale = maxW / totalW;
       if (scale < 0.55) {
-        // Too small, use snake layout instead
         useSnake = true;
         scale = 1;
       }
@@ -757,25 +756,48 @@ class Renderer {
       // Single row centered
       rows.push({ indices: items.map((_, i) => i), width: totalW * scale, startX: marginX + (maxW - totalW * scale) / 2, dir: 1 });
     } else {
-      // Build snake rows with fixed cell width so doubles don't break alignment
-      const cellW = baseH; // Every tile occupies the same horizontal step
+      // Build snake rows with CURVES at the edges
+      const cellW = baseH + gap; // Each cell is one horizontal step (including gap)
+      const cols = Math.max(1, Math.floor(maxW / cellW));
+
       let currentRow = [];
       let currentRowW = 0;
+      let col = 0;
+      let dir = 1; // 1 = right, -1 = left
+
       for (let i = 0; i < items.length; i++) {
-        if (currentRow.length === 0) {
-          currentRow.push(i);
-          currentRowW = cellW;
-        } else if (currentRowW + gap + cellW <= maxW) {
-          currentRow.push(i);
-          currentRowW += gap + cellW;
+        const it = items[i];
+        const isD = isDouble(it.tile);
+
+        // Check if next tile fits in current direction
+        let needCurve = false;
+        if (dir === 1) {
+          if (col >= cols) needCurve = true;
         } else {
-          rows.push({ indices: currentRow, width: currentRowW });
-          currentRow = [i];
-          currentRowW = cellW;
+          if (col < 0) needCurve = true;
         }
+
+        if (needCurve && currentRow.length > 0) {
+          // The PREVIOUS tile becomes the curve (it was the last of the row)
+          // Mark it as curve
+          const prevIdx = currentRow[currentRow.length - 1];
+          items[prevIdx].isCurve = true;
+
+          // Start new row
+          rows.push({ indices: currentRow, width: currentRowW });
+          currentRow = [];
+          currentRowW = 0;
+          dir *= -1;
+          if (dir === 1) col = 0;
+          else col = cols - 1;
+        }
+
+        currentRow.push(i);
+        currentRowW += cellW;
+        col += dir;
       }
       if (currentRow.length > 0) {
-        rows.push({ indices: currentRow, width: currentRowW });
+        rows.push({ indices: currentRow, width: currentRowW - gap });
       }
 
       // Calculate starting X for each row to create snake alignment
@@ -785,16 +807,18 @@ class Renderer {
       for (let r = 1; r < rows.length; r++) {
         const prev = rows[r - 1];
         if (r % 2 === 1) {
+          // Odd row: right to left, aligned to end of previous row
           rows[r].startX = prev.startX + prev.width - rows[r].width;
           rows[r].dir = -1;
         } else {
+          // Even row: left to right, aligned to start of previous row
           rows[r].startX = prev.startX;
           rows[r].dir = 1;
         }
       }
     }
 
-    const rowHeight = (useSnake ? baseH : baseH) * scale + gap * scale + (useSnake ? 6 : 10);
+    const rowHeight = (useSnake ? baseH : baseH) * scale + gap * scale + (useSnake ? 8 : 10);
     const totalH = rows.length * rowHeight;
     const startY = marginY + Math.max(0, (maxH - totalH) / 2);
 
@@ -807,21 +831,30 @@ class Renderer {
         let x = row.startX;
         for (const idx of row.indices) {
           const it = items[idx];
-          const drawW = it.w * scale;
-          const drawH = it.h * scale;
-          // Center tile in its cell when using snake (doubles are narrower)
+          let drawW = it.w * scale;
+          let drawH = it.h * scale;
+          let vertical = it.vertical;
+          let swap = false;
+
+          // Curve tile: draw vertical with open number UP
+          if (useSnake && it.isCurve) {
+            vertical = true;
+            drawW = baseW * scale;
+            drawH = baseH * scale;
+            // For curve, open goes UP. Default vertical has b up, a down.
+            // If open === a, we need swap so a goes up.
+            swap = (it.open === it.tile.a);
+          } else {
+            if (it.side === 'left') swap = (it.open === it.tile.a);
+            else if (it.side === 'right') swap = (it.open === it.tile.b);
+          }
+
+          // Center tile in its cell
           const cx = useSnake ? x + (baseH * scale - drawW) / 2 : x;
           const cy = y + (rowHeight - drawH) / 2;
 
-          let swap = false;
-          if (it.side === 'left') {
-            swap = (it.open === it.tile.a);
-          } else if (it.side === 'right') {
-            swap = (it.open === it.tile.b);
-          }
-
           const lastPlayed = (idx === chain.length - 1);
-          this.drawTile(ctx, cx, cy, drawW, drawH, it.tile, it.vertical, false, lastPlayed, swap);
+          this.drawTile(ctx, cx, cy, drawW, drawH, it.tile, vertical, false, lastPlayed, swap);
           rects.push({ x: cx, y: cy, w: drawW, h: drawH, tile: it.tile });
           x += (useSnake ? baseH : it.w) * scale + gap * scale;
         }
@@ -829,23 +862,29 @@ class Renderer {
         let x = row.startX + row.width;
         for (const idx of row.indices) {
           const it = items[idx];
-          const drawW = it.w * scale;
-          const drawH = it.h * scale;
+          let drawW = it.w * scale;
+          let drawH = it.h * scale;
+          let vertical = it.vertical;
+          let swap = false;
           const step = (useSnake ? baseH : it.w) * scale;
           x -= step;
-          // Center tile in its cell when using snake
+
+          // Curve tile: draw vertical with open number UP
+          if (useSnake && it.isCurve) {
+            vertical = true;
+            drawW = baseW * scale;
+            drawH = baseH * scale;
+            swap = (it.open === it.tile.a);
+          } else {
+            if (it.side === 'left') swap = (it.open === it.tile.a);
+            else if (it.side === 'right') swap = (it.open === it.tile.b);
+          }
+
           const cx = useSnake ? x + (baseH * scale - drawW) / 2 : x;
           const cy = y + (rowHeight - drawH) / 2;
 
-          let swap = false;
-          if (it.side === 'left') {
-            swap = (it.open === it.tile.a);
-          } else if (it.side === 'right') {
-            swap = (it.open === it.tile.b);
-          }
-
           const lastPlayed = (idx === chain.length - 1);
-          this.drawTile(ctx, cx, cy, drawW, drawH, it.tile, it.vertical, false, lastPlayed, swap);
+          this.drawTile(ctx, cx, cy, drawW, drawH, it.tile, vertical, false, lastPlayed, swap);
           rects.push({ x: cx, y: cy, w: drawW, h: drawH, tile: it.tile });
           x -= gap * scale;
         }

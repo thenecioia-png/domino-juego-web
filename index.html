@@ -611,7 +611,7 @@ class Renderer {
     });
   }
 
-  drawTile(ctx, x, y, w, h, tile, vertical, highlight, lastPlayed) {
+  drawTile(ctx, x, y, w, h, tile, vertical, highlight, lastPlayed, swap = false) {
     ctx.save();
     // shadow
     ctx.shadowColor = 'rgba(0,0,0,0.45)';
@@ -633,12 +633,18 @@ class Renderer {
     this.roundRect(ctx, x + 2, y + 2, w - 4, h - 4, r * 0.7);
     ctx.fill();
 
+    // Determine which numbers go where based on swap
+    const topNum = vertical ? (swap ? tile.a : tile.b) : null;
+    const botNum = vertical ? (swap ? tile.b : tile.a) : null;
+    const leftNum = vertical ? null : (swap ? tile.b : tile.a);
+    const rightNum = vertical ? null : (swap ? tile.a : tile.b);
+
     if (vertical) {
       const hw = w / 2;
       ctx.strokeStyle = 'rgba(0,0,0,0.15)';
       ctx.beginPath(); ctx.moveTo(x + 4, y + h / 2); ctx.lineTo(x + w - 4, y + h / 2); ctx.stroke();
-      this.drawHalf(ctx, x, y, w, h / 2, tile.b);
-      this.drawHalf(ctx, x, y + h / 2, w, h / 2, tile.a);
+      this.drawHalf(ctx, x, y, w, h / 2, topNum);
+      this.drawHalf(ctx, x, y + h / 2, w, h / 2, botNum);
       if (lastPlayed) {
         ctx.fillStyle = '#ffb300';
         ctx.beginPath();
@@ -651,8 +657,8 @@ class Renderer {
     } else {
       ctx.strokeStyle = 'rgba(0,0,0,0.15)';
       ctx.beginPath(); ctx.moveTo(x + w / 2, y + 4); ctx.lineTo(x + w / 2, y + h - 4); ctx.stroke();
-      this.drawHalf(ctx, x, y, w / 2, h, tile.a);
-      this.drawHalf(ctx, x + w / 2, y, w / 2, h, tile.b);
+      this.drawHalf(ctx, x, y, w / 2, h, leftNum);
+      this.drawHalf(ctx, x + w / 2, y, w / 2, h, rightNum);
       if (lastPlayed) {
         ctx.fillStyle = '#ffb300';
         ctx.beginPath();
@@ -709,68 +715,150 @@ class Renderer {
     const chain = board.chain;
     if (chain.length === 0) return { leftRect: null, rightRect: null };
 
-    // compute layout
     const isDouble = t => t.a === t.b;
     const baseW = this.tileW;
     const baseH = this.tileH;
-    const gap = this.chainGap;
-    // We'll do a simple snake layout: horizontal rows, turning when hitting margins
+    const gap = 4;
     const marginX = 40;
-    const marginY = 100;
-    const availW = this.canvas.width - marginX * 2;
-    const availH = this.handY - marginY * 2;
-    const colW = baseW + gap;
-    const rowH = baseH + gap;
-    const cols = Math.max(1, Math.floor(availW / colW));
-    const rows = Math.max(1, Math.floor(availH / rowH));
+    const marginY = 80;
+    const maxW = this.canvas.width - marginX * 2;
+    const maxH = this.handY - marginY * 2;
 
-    // Assign grid positions
-    const positions = [];
-    let r = Math.floor(rows / 2), c = Math.floor(cols / 2);
-    let dir = 1; // 1 right, -1 left
-    positions.push({ r, c, orient: 'h' });
-    for (let i = 1; i < chain.length; i++) {
-      const prev = positions[i - 1];
-      const t = chain[i].tile;
-      // try to extend in current row direction
-      let nc = prev.c + dir;
-      if (nc < 0 || nc >= cols) {
-        // turn down and reverse
-        r = prev.r + 1;
-        dir *= -1;
-        nc = prev.c + dir;
-        if (r >= rows) { r = prev.r - 1; } // go up if no space
-      } else {
-        r = prev.r;
-      }
-      positions.push({ r, c: nc, orient: 'h' });
-    }
-
-    const startX = marginX + (availW - cols * colW) / 2;
-    const startY = marginY + (availH - rows * rowH) / 2;
-
-    const rects = [];
-    chain.forEach((item, i) => {
-      const pos = positions[i];
-      const tx = startX + pos.c * colW;
-      const ty = startY + pos.r * rowH;
-      const vertical = isDouble(item.tile);
-      const tw = vertical ? baseW : baseH;
-      const th = vertical ? baseH : baseW;
-      // center in cell
-      const cx = tx + colW / 2 - tw / 2;
-      const cy = ty + rowH / 2 - th / 2;
-      const lastPlayed = (i === chain.length - 1);
-      this.drawTile(ctx, cx, cy, tw, th, item.tile, vertical, false, lastPlayed);
-      rects.push({ x: cx, y: cy, w: tw, h: th, tile: item.tile });
+    const items = chain.map((item, i) => {
+      const d = isDouble(item.tile);
+      return {
+        index: i,
+        tile: item.tile,
+        side: item.side,
+        open: item.open,
+        w: d ? baseW : baseH,
+        h: d ? baseH : baseW,
+        vertical: d
+      };
     });
 
-    // return drop zones for left/right ends (approximate)
+    // Calculate total width
+    const totalW = items.reduce((sum, it, i) => sum + it.w + (i > 0 ? gap : 0), 0);
+
+    // If it fits reasonably in one row, use single row with scale
+    let scale = 1;
+    let useSnake = false;
+    if (totalW > maxW) {
+      scale = maxW / totalW;
+      if (scale < 0.55) {
+        // Too small, use snake layout instead
+        useSnake = true;
+        scale = 1;
+      }
+    }
+
+    let rows = [];
+    if (!useSnake) {
+      // Single row centered
+      rows.push({ indices: items.map((_, i) => i), width: totalW * scale, startX: marginX + (maxW - totalW * scale) / 2, dir: 1 });
+    } else {
+      // Build snake rows with fixed cell width so doubles don't break alignment
+      const cellW = baseH; // Every tile occupies the same horizontal step
+      let currentRow = [];
+      let currentRowW = 0;
+      for (let i = 0; i < items.length; i++) {
+        if (currentRow.length === 0) {
+          currentRow.push(i);
+          currentRowW = cellW;
+        } else if (currentRowW + gap + cellW <= maxW) {
+          currentRow.push(i);
+          currentRowW += gap + cellW;
+        } else {
+          rows.push({ indices: currentRow, width: currentRowW });
+          currentRow = [i];
+          currentRowW = cellW;
+        }
+      }
+      if (currentRow.length > 0) {
+        rows.push({ indices: currentRow, width: currentRowW });
+      }
+
+      // Calculate starting X for each row to create snake alignment
+      rows[0].startX = marginX + (maxW - rows[0].width) / 2;
+      rows[0].dir = 1;
+
+      for (let r = 1; r < rows.length; r++) {
+        const prev = rows[r - 1];
+        if (r % 2 === 1) {
+          rows[r].startX = prev.startX + prev.width - rows[r].width;
+          rows[r].dir = -1;
+        } else {
+          rows[r].startX = prev.startX;
+          rows[r].dir = 1;
+        }
+      }
+    }
+
+    const rowHeight = (useSnake ? baseH : baseH) * scale + gap * scale + (useSnake ? 6 : 10);
+    const totalH = rows.length * rowHeight;
+    const startY = marginY + Math.max(0, (maxH - totalH) / 2);
+
+    const rects = [];
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+      const row = rows[rowIdx];
+      const y = startY + rowIdx * rowHeight;
+
+      if (row.dir === 1 || !useSnake) {
+        let x = row.startX;
+        for (const idx of row.indices) {
+          const it = items[idx];
+          const drawW = it.w * scale;
+          const drawH = it.h * scale;
+          // Center tile in its cell when using snake (doubles are narrower)
+          const cx = useSnake ? x + (baseH * scale - drawW) / 2 : x;
+          const cy = y + (rowHeight - drawH) / 2;
+
+          let swap = false;
+          if (it.side === 'left') {
+            swap = (it.open === it.tile.a);
+          } else if (it.side === 'right') {
+            swap = (it.open === it.tile.b);
+          }
+
+          const lastPlayed = (idx === chain.length - 1);
+          this.drawTile(ctx, cx, cy, drawW, drawH, it.tile, it.vertical, false, lastPlayed, swap);
+          rects.push({ x: cx, y: cy, w: drawW, h: drawH, tile: it.tile });
+          x += (useSnake ? baseH : it.w) * scale + gap * scale;
+        }
+      } else {
+        let x = row.startX + row.width;
+        for (const idx of row.indices) {
+          const it = items[idx];
+          const drawW = it.w * scale;
+          const drawH = it.h * scale;
+          const step = (useSnake ? baseH : it.w) * scale;
+          x -= step;
+          // Center tile in its cell when using snake
+          const cx = useSnake ? x + (baseH * scale - drawW) / 2 : x;
+          const cy = y + (rowHeight - drawH) / 2;
+
+          let swap = false;
+          if (it.side === 'left') {
+            swap = (it.open === it.tile.a);
+          } else if (it.side === 'right') {
+            swap = (it.open === it.tile.b);
+          }
+
+          const lastPlayed = (idx === chain.length - 1);
+          this.drawTile(ctx, cx, cy, drawW, drawH, it.tile, it.vertical, false, lastPlayed, swap);
+          rects.push({ x: cx, y: cy, w: drawW, h: drawH, tile: it.tile });
+          x -= gap * scale;
+        }
+      }
+    }
+
     const first = rects[0];
     const last = rects[rects.length - 1];
+    const dropW = baseH * scale;
+    const dropH = baseW * scale;
     return {
-      leftRect: { x: first.x - baseH, y: first.y, w: baseH, h: baseW },
-      rightRect: { x: last.x + last.w, y: last.y, w: baseH, h: baseW }
+      leftRect: { x: first.x - dropW - 8, y: first.y + (first.h - dropH) / 2, w: dropW, h: dropH },
+      rightRect: { x: last.x + last.w + 8, y: last.y + (last.h - dropH) / 2, w: dropW, h: dropH }
     };
   }
 
@@ -784,7 +872,7 @@ class Renderer {
     const rects = [];
     for (let i = 0; i < count; i++) {
       const t = player.hand[i];
-      const highlight = this.hoverTile === t;
+      const highlight = this.hoverTile === t || this.selectedTile === t;
       const valid = board.canPlace(t);
       ctx.globalAlpha = valid ? 1 : 0.5;
       this.drawTile(ctx, cx, y, this.tileW, this.tileH, t, true, highlight && valid);
@@ -851,7 +939,7 @@ class Renderer {
     }
 
     // highlight valid drop zones if a tile selected or hover
-    if (this.hoverTile && game.board.canPlace(this.hoverTile)) {
+    if ((this.hoverTile && game.board.canPlace(this.hoverTile)) || this.selectedTile) {
       ctx.save();
       ctx.strokeStyle = 'rgba(255, 200, 50, 0.7)';
       ctx.lineWidth = 3;
@@ -918,6 +1006,8 @@ class App {
 
   startGame(mode) {
     $('menuOverlay').classList.add('hidden');
+    this.selectedTile = null;
+    this.renderer.hoverTile = null;
     this.game = new Game(mode);
     this.game.startRound();
     this.updateUI();
@@ -998,29 +1088,45 @@ class App {
     const rect = this.canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
 
-    // check hand click -> play immediately
+    // check hand click
     for (const r of this.renderer.handRects || []) {
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
         if (!r.valid) { this.playSound('error'); return; }
         const moves = this.game.currentPlayer().validMoves(this.game.board).filter(m => m.tile === r.tile);
         if (moves.length === 0) { this.playSound('error'); return; }
-        // if both sides are possible, default to the first available (usually left), but allow explicit choice via side buttons if we add them later
-        const side = moves[0].side;
-        const ok = this.game.playTile(this.game.turnIndex, r.tile, side);
-        if (ok) {
-          this.playSound('place');
-          this.renderer.hoverTile = null;
-          this.updateUI();
-          if (this.game.roundOver) this.handleRoundEnd();
-          else this.processBotTurn();
+
+        if (moves.length === 1) {
+          // Only one possible side -> play immediately
+          const side = moves[0].side;
+          const ok = this.game.playTile(this.game.turnIndex, r.tile, side);
+          if (ok) {
+            this.playSound('place');
+            this.selectedTile = null;
+            this.renderer.hoverTile = null;
+            this.updateUI();
+            if (this.game.roundOver) this.handleRoundEnd();
+            else this.processBotTurn();
+          } else {
+            this.playSound('error');
+          }
         } else {
-          this.playSound('error');
+          // Multiple sides possible -> select tile and wait for user to pick a drop zone
+          if (this.selectedTile === r.tile) {
+            // Deselect if clicking the same tile again
+            this.selectedTile = null;
+            this.game.msg = 'Ficha deseleccionada.';
+          } else {
+            this.selectedTile = r.tile;
+            const sides = moves.map(m => m.side === 'left' ? 'izquierda' : 'derecha').join(' o ');
+            this.game.msg = `Ficha [${r.tile.a}|${r.tile.b}] seleccionada. Haz clic en la zona ${sides} para jugar.`;
+          }
+          this.updateUI();
         }
         return;
       }
     }
 
-    // fallback: click on board drop zones if a tile was previously selected (legacy support)
+    // Check drop zones if a tile is selected
     if (this.selectedTile) {
       const z = this.renderer.zones;
       let side = null;
@@ -1044,7 +1150,10 @@ class App {
           this.playSound('error');
         }
       } else {
+        // Clicked elsewhere -> deselect
         this.selectedTile = null;
+        this.game.msg = '';
+        this.updateUI();
       }
     }
   }
